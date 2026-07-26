@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.25
+// @version      1.3
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
@@ -67,6 +67,8 @@
     // -------------------------------------------------------------
     const CHAR_BTN_ID = 'pydle-char-counter';
     const ATTEMPT_BTN_ID = 'pydle-attempt-counter';
+    const SHARE_STATS_BTN_ID = 'pydle-share-stats';
+
     const PUZZLE_TITLE_SELECTOR = 'div.group.flex.mr-2.items-center';
     let FIRST_TIME = true;
     const MAX_CHARS = 250;
@@ -76,6 +78,216 @@
     let scrollerObserver = null;
     let isRunListenerAttached = false;
     let lastestPuzzleId = -1;
+
+    // Emoji Mapping Dictionary
+    const colorEmojiMap = {
+        red: '🟥',
+        orange: '🟧',
+        yellow: '🟨',
+        green: '🟩',
+        blue: '🟦',
+        purple: '🟪',
+        brown: '🟫',
+        black: '⬛',
+        white: '⬜'
+    };
+
+    // Color CSS Mapping for HTML modal display
+    const colorCssMap = {
+        red: '#d90429',
+        orange: '#f77f00',
+        yellow: '#fcbf49',
+        green: '#2d6a4f',
+        blue: '#0077b6',
+        purple: '#7b2cbf',
+        brown: '#6c584c',
+        black: '#1f1f1f',
+        white: '#ffffff'
+    };
+
+    function showShareDialog(data) {
+        // Remove existing modal if already open
+        const existing = document.getElementById('pydle-custom-modal');
+        if (existing) existing.remove();
+
+        const output = data.output;
+        const game = data.game;
+        const attempts = data.attempts;
+        const characters = data.characters;
+        const gridRows = output.length;
+        const gridCols = output[0] ? output[0].length : 5;
+
+        // 1. Convert output matrix into HTML elements for visual preview
+        const gridHtml = output.flatMap(row => 
+            row.map(cell => {
+                const color = cell[1] || 'black';
+                const cssColor = colorCssMap[color] || '#333333';
+                return `<div style="
+                    aspect-ratio: 1; 
+                    width: 100%; 
+                    max-width: 32px; 
+                    background: ${cssColor}; 
+                    border-radius: 6px;
+                "></div>`;
+            })
+        ).join('');
+
+        // 2. Convert output matrix into Emoji string (t)
+        const t = output.map(row => {
+            return row.map(cell => {
+                const color = cell[1];
+                return colorEmojiMap[color] || '⬛';
+            }).join('');
+        }).join('\n');
+
+        // 3. Format output string using your exact template string
+        let shareText = `Pydle #${game}\n${t}\nAttempts: ${attempts}\nCharacters: ${characters}/250\n`;
+
+       // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'pydle-custom-modal';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000000;
+            padding: 2vw;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        `;
+
+        // Responsive Modal Container
+        overlay.innerHTML = `
+            <div style="
+                background-color: #0c0c0c;
+                color: #ffffff;
+                padding: clamp(16px, 4vw, 32px);
+                border-radius: min(4vw, 16px);
+                width: min(90vw, 420px);
+                max-height: 90vh;
+                overflow-y: auto;
+                box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+                position: relative;
+                border: 1px solid #1f1f1f;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+            ">
+                <!-- Close Button -->
+                <button id="pydle-close-btn" style="
+                    position: absolute;
+                    top: clamp(12px, 3vw, 20px);
+                    right: clamp(12px, 3vw, 20px);
+                    background: #1f1f1f;
+                    border: none;
+                    color: #fff;
+                    font-size: clamp(12px, 2vw, 14px);
+                    cursor: pointer;
+                    width: clamp(26px, 5vw, 32px);
+                    height: clamp(26px, 5vw, 32px);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">✕</button>
+
+                <!-- Header -->
+                <h2 style="
+                    margin: 0 0 clamp(12px, 3vw, 24px) 0; 
+                    font-size: clamp(16px, 3.5vw, 20px); 
+                    font-weight: 600;
+                ">You completed the Pydle!</h2>
+
+                <!-- Subheader -->
+                <div style="
+                    font-size: clamp(12px, 2.5vw, 14px); 
+                    margin-bottom: clamp(10px, 2vw, 16px); 
+                    font-weight: 500;
+                ">Pydle #${game}</div>
+
+                <!-- Responsive CSS Grid Output -->
+                <div style="
+                    display: grid;
+                    grid-template-columns: repeat(${gridCols}, minmax(0, 32px));
+                    gap: clamp(4px, 1vw, 6px);
+                    margin-bottom: clamp(16px, 3vw, 24px);
+                    justify-content: start;
+                ">
+                    ${gridHtml}
+                </div>
+
+                <!-- Stats Text -->
+                <div style="font-size: clamp(12px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: 6px;">Attempts: ${attempts}</div>
+                <div style="font-size: clamp(12px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: clamp(16px, 3vw, 24px);">Characters: ${characters}/250</div>
+
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: clamp(8px, 2vw, 12px); margin-top: auto;">
+                    <button id="pydle-share-btn" style="
+                        flex: 1;
+                        background-color: #1f2937;
+                        color: #ffffff;
+                        border: 1px solid #374151;
+                        padding: clamp(8px, 1.8vw, 12px) clamp(12px, 2vw, 16px);
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: clamp(12px, 2.5vw, 14px);
+                        cursor: pointer;
+                    ">Share</button>
+                    <button id="pydle-copy-btn" style="
+                        flex: 1;
+                        background-color: #1f2937;
+                        color: #ffffff;
+                        border: 1px solid #374151;
+                        padding: clamp(8px, 1.8vw, 12px) clamp(12px, 2vw, 16px);
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: clamp(12px, 2.5vw, 14px);
+                        cursor: pointer;
+                    ">Copy</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Event Listeners
+        document.getElementById('pydle-close-btn').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        // Copy Handler
+        const handleCopy = async () => {
+            try {
+                shareText+="https://pydle.net/";
+                await navigator.clipboard.writeText(shareText);
+                overlay.remove();
+            } catch (err) {
+                console.error("Failed to copy: ", err);
+            }
+        };
+
+        document.getElementById('pydle-copy-btn').addEventListener('click', handleCopy);
+        // Share Handler
+        document.getElementById('pydle-share-btn').addEventListener('click', async () => {
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: `Pydle #${game}`,
+                        text: shareText
+                    });
+                } catch (err) {
+                    handleCopy();
+                }
+            } else {
+                handleCopy();
+            }
+        });
+    }
 
     function getPuzzleId() {
         const element = document.querySelector(PUZZLE_TITLE_SELECTOR);
@@ -92,7 +304,7 @@
         return 0;
     }
 
-    function getLocalStorageData() {
+    function getCurrentPuzzleLocalStorageData() {
         let key = ""
         try {
             let puzzleId = getPuzzleId();
@@ -158,8 +370,27 @@
         }
     }
 
+    function handleShareButton(){
+        const puzzleData = getCurrentPuzzleLocalStorageData();
+        let isSolved = puzzleData.solved;
+        let isSuccess = puzzleData.success;
+
+        let shareBtn = document.getElementById(SHARE_STATS_BTN_ID);
+        if (isSuccess && isSolved){
+            shareBtn.style.display = '';
+        }
+        else{
+            shareBtn.style.display = 'none';
+        }
+
+        shareBtn.addEventListener('click', () => {
+            showShareDialog(puzzleData);
+        });
+
+    }
+
     function updateAttempts() {
-        const parsedData = getLocalStorageData();
+        const parsedData = getCurrentPuzzleLocalStorageData();
         let count = 0
         if (typeof parsedData.attempts === 'number') {
             count = parsedData.attempts;
@@ -266,6 +497,7 @@
                 let currentPuzzleId = getPuzzleId();
                 if (lastestPuzzleId != currentPuzzleId) {
                     updateAttempts();
+                    handleShareButton();
                     lastestPuzzleId = currentPuzzleId;
                 }
             }
@@ -287,7 +519,7 @@
         let characters = 0;
         let attempts = 0;
 
-        const parsedData = getLocalStorageData();
+        const parsedData = getCurrentPuzzleLocalStorageData();
 
         if (typeof parsedData.characters === 'number') characters = parsedData.characters;
         if (typeof parsedData.attempts === 'number') attempts = parsedData.attempts;
@@ -309,6 +541,7 @@
 
         appendButton(CHAR_BTN_ID, `Char count: ${characters}`);
         appendButton(ATTEMPT_BTN_ID, `Attempts: ${attempts}`);
+        appendButton(SHARE_STATS_BTN_ID, `Share`);
     }
 
     function initUI() {
