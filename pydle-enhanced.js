@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.25
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
@@ -271,7 +271,6 @@
             }
         });
 
-        // We observe characterData and childList so we don't miss when "152" is appended
         observer.observe(document.body, {
             childList: true,
             subtree: true,
@@ -301,6 +300,7 @@
             newBtn.removeAttribute('role');
             newBtn.removeAttribute('aria-selected');
             newBtn.removeAttribute('aria-controls');
+            newBtn.removeAttribute('data-selected')
             newBtn.style.cursor = 'default';
             newBtn.style.userSelect = 'none';
 
