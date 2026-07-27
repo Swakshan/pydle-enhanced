@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.35
+// @version      1.4
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pydle.net
+// @namespace   https://github.com/Swakshan/pydle-enhanced/
+// @installURL  https://github.com/Swakshan/pydle-enhanced/raw/refs/heads/main/pydle-enhanced.js
+// @downloadURL https://github.com/Swakshan/pydle-enhanced/raw/refs/heads/main/pydle-enhanced.js
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
