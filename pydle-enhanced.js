@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.35
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
@@ -18,7 +18,7 @@
     // -------------------------------------------------------------
     (function overrideGlobalDate() {
         const urlParams = new URLSearchParams(window.location.search);
-        const idParam = urlParams.get('id');
+        const idParam = urlParams.get('game');
         const id = parseInt(idParam, 10);
 
         if (!isNaN(id) && id > 0) {
