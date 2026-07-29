@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.65
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
@@ -148,12 +148,12 @@
     function addDialogBox() {
         // Create modal overlay
         const overlay = document.createElement('div');
+        overlay.classList.add("bg-white/25");
+
         overlay.id = DIALOG_BOX_ID;
         overlay.style.cssText = `
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            background-color: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(4px);
             display: flex;
             justify-content: center;
             align-items: center;
