@@ -56,14 +56,21 @@ Adds the ability to share any of your previous victory
 
 ---
 
+### 5. 🏆 Records
+Adds a dedicated section to view all your finished, unfinished game records
+
+<video src="https://github.com/user-attachments/assets/a7c033cc-b86a-449a-a6ba-2b6c45088da2" controls></video>
+
+---
+
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to check out the [Issues page](https://github.com/Swakshan/pydle-enhanced/issues).
 
 ---
 
-<!-- ## 🤵Visitor count
-<img src="https://count.getloli.com/@%7B-Swakshan-pydle-enhanced%7D?theme=3d-num&padding=8&offset=-5&align=center&scale=1&pixelated=0&darkmode=auto" /> -->
+## 🤵Visitor count
+<img src="https://count.getloli.com/@%7B-Swakshan-pydle-enhanced%7D?theme=3d-num&padding=8&offset=-5&align=center&scale=1&pixelated=0&darkmode=auto" />
 
 ---
 
