@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pydle Enhanced
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  A Tampermonkey userscript for Pydle.net that adds more features
 // @author       Swakshan
 // @match        https://pydle.net/*
@@ -71,12 +71,19 @@
     const CHAR_BTN_ID = 'pydle-char-counter';
     const ATTEMPT_BTN_ID = 'pydle-attempt-counter';
     const SHARE_STATS_BTN_ID = 'pydle-share-stats';
+    const RECORDS_BTN_ID = 'pydle-records-button';
+    const DIALOG_BOX_ID = "pydle-custom-modal";
+    const DIALOG_BOX_CLOSE_BTN_ID = "pydle-dialog-close-btn";
+    const DIALOG_BOX_HEADER_ID = "pydle-dialog-header";
+    const DIALOG_BOX_SUB_HEADER_ID = "pydle-dialog-sub-header";
+    const DIALOG_BOX_BODY_ID = "pydle-dialog-body";
 
     const PUZZLE_TITLE_SELECTOR = 'div.group.flex.mr-2.items-center';
     let FIRST_TIME = true;
     const MAX_CHARS = 250;
     // ID 1 = Feb 24, 2026
     const BASE_DATE = "2026-02-24";
+
 
     let scrollerObserver = null;
     let isRunListenerAttached = false;
@@ -108,47 +115,40 @@
         white: '#ffffff'
     };
 
-    function showShareDialog(data) {
-        // Remove existing modal if already open
-        const existing = document.getElementById('pydle-custom-modal');
-        if (existing) existing.remove();
+    function getLocalStorageData(targetDate) {
+        try {
+            const year = targetDate.getFullYear();
+            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const day = String(targetDate.getDate()).padStart(2, '0');
+            let key = `pydle:guesses-1:${year}-${month}-${day}`;
+            let storedData = localStorage.getItem(key);
+            if (!storedData) {
+                storedData = "{}"
+            }
+            return JSON.parse(storedData);
+        } catch (error) {
+            console.error('Error parsing localStorage key:', key, error);
+        }
+        return JSON.parse("{}");
+    }
 
-        const output = data.output;
-        const game = data.game;
-        const attempts = data.attempts;
-        const characters = data.characters;
-        const gridRows = output.length;
-        const gridCols = output[0] ? output[0].length : 5;
+    function getCurrentPuzzleLocalStorageData() {
+        let puzzleId = getPuzzleId();
+        let targetDate = new Date();
+        if (FIRST_TIME || puzzleId < 1) {
+            FIRST_TIME = false;
+        } else {
+            targetDate = new Date(BASE_DATE);
+            targetDate.setDate(targetDate.getDate() + puzzleId - 1)
+        }
 
-        // 1. Convert output matrix into HTML elements for visual preview
-        const gridHtml = output.flatMap(row => 
-            row.map(cell => {
-                const color = cell[1] || 'black';
-                const cssColor = colorCssMap[color] || '#333333';
-                return `<div style="
-                    aspect-ratio: 1; 
-                    width: 100%; 
-                    max-width: 32px; 
-                    background: ${cssColor}; 
-                    border-radius: 6px;
-                "></div>`;
-            })
-        ).join('');
+        return getLocalStorageData(targetDate);
+    }
 
-        // 2. Convert output matrix into Emoji string (t)
-        const t = output.map(row => {
-            return row.map(cell => {
-                const color = cell[1];
-                return colorEmojiMap[color] || '⬛';
-            }).join('');
-        }).join('\n');
-
-        // 3. Format output string using your exact template string
-        let shareText = `Pydle #${game}\n${t}\nAttempts: ${attempts}\nCharacters: ${characters}/250\n`;
-
-       // Create modal overlay
+    function addDialogBox() {
+        // Create modal overlay
         const overlay = document.createElement('div');
-        overlay.id = 'pydle-custom-modal';
+        overlay.id = DIALOG_BOX_ID;
         overlay.style.cssText = `
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
@@ -162,7 +162,6 @@
             box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         `;
-
         // Responsive Modal Container
         overlay.innerHTML = `
             <div style="
@@ -178,10 +177,9 @@
                 border: 1px solid #1f1f1f;
                 box-sizing: border-box;
                 display: flex;
-                flex-direction: column;
-            ">
+                flex-direction: column; ">
                 <!-- Close Button -->
-                <button id="pydle-close-btn" style="
+                <button id="${DIALOG_BOX_CLOSE_BTN_ID}" style="
                     position: absolute;
                     top: clamp(12px, 3vw, 20px);
                     right: clamp(12px, 3vw, 20px);
@@ -199,20 +197,234 @@
                 ">✕</button>
 
                 <!-- Header -->
-                <h2 style="
-                    margin: 0 0 clamp(12px, 3vw, 24px) 0; 
-                    font-size: clamp(16px, 3.5vw, 20px); 
-                    font-weight: 600;
-                ">You completed the Pydle!</h2>
+                <h2 id="${DIALOG_BOX_HEADER_ID}" style="
+                    margin: 0 0 clamp(12px, 3vw, 24px) 0;
+                    font-size: clamp(25px, 4vw, 20px);
+                    font-weight: 800;
+                "></h2>
 
                 <!-- Subheader -->
-                <div style="
-                    font-size: clamp(12px, 2.5vw, 14px); 
-                    margin-bottom: clamp(10px, 2vw, 16px); 
+                <div id="${DIALOG_BOX_SUB_HEADER_ID}" style="
+                    font-size: clamp(18px, 3vw, 15px);
+                    margin-bottom: clamp(18px, 2vw, 16px);
                     font-weight: 500;
-                ">Pydle #${game}</div>
+                "></div>
 
-                <!-- Responsive CSS Grid Output -->
+                <div id="${DIALOG_BOX_BODY_ID}"></div>
+
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Event Listeners
+        document.getElementById(DIALOG_BOX_CLOSE_BTN_ID).addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+    }
+
+    function recordsDialogBox() {
+        addDialogBox();
+
+        const dialogBody = document.getElementById(DIALOG_BOX_BODY_ID);
+        if (!dialogBody) return;
+
+        // 1. Target the modal container (parent of the dialog body) and expand its width
+        const modalContainer = dialogBody.parentElement;
+        if (modalContainer) {
+            modalContainer.style.width = 'min(100vw, 750px)';
+        }
+
+        // 2. Generate date sequence starting from Feb 24, 2026
+        const startDate = new Date(BASE_DATE);
+        const today = new Date();
+
+        startDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+
+        let rowsHTML = '';
+        let gameNum = 1;
+        let totalSolved = 0;
+        let totalAttempted = 0;
+
+        let currentDate = new Date(startDate);
+        while (currentDate <= today) {
+            const formattedDate = currentDate.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+            let isSolved = "❌";
+            let characters = "-";
+            let attempts = "-";
+            let lines = "-";
+            let saveData = getLocalStorageData(currentDate);
+            if (saveData.hasOwnProperty("success")) {
+                if (saveData.success) {
+                    isSolved = "⚠️";
+                    totalAttempted++;
+                }
+                if (saveData.solved) {
+                    isSolved = "✅";
+                    totalSolved++;
+                }
+                characters = saveData.characters;
+                attempts = saveData.attempts;
+                lines = saveData.lines;
+            }
+            rowsHTML += `
+            <tr style="border-bottom: 1px solid #1f1f1f; height: 38px;">
+                <td style="padding: 8px; text-align: center;">${gameNum}</td>
+                <td style="padding: 8px; text-align: left; white-space: nowrap;">${formattedDate}</td>
+                <td style="padding: 8px; text-align: left;">${isSolved}</td>
+                <td style="padding: 8px; text-align: left;">${characters}</td>
+                <td style="padding: 8px; text-align: left;">${lines}</td>
+                <td style="padding: 8px; text-align: center;">${attempts}</td>
+            </tr>
+        `;
+            currentDate.setDate(currentDate.getDate() + 1);
+            gameNum++;
+        }
+        gameNum--;
+        document.getElementById(DIALOG_BOX_HEADER_ID).textContent = "Your records 🏆";
+        
+        let subHeadingElement = document.getElementById(DIALOG_BOX_SUB_HEADER_ID);
+        let subHeading = `❌ Unsolved: ${gameNum-totalAttempted}/${gameNum}\n⚠️ Attempted: ${totalAttempted}/${gameNum}\n✅ Solved: ${totalSolved}/${gameNum}`;
+        subHeadingElement.innerHTML = subHeading;
+        subHeadingElement.style.whiteSpace = "pre-line";
+
+        dialogBody.innerHTML = `
+        <div style="
+            max-height: 380px;
+            overflow-y: auto;
+            border: 1px solid #1f1f1f;
+            border-radius: 8px;
+            background-color: #080808;
+        ">
+            <table style="
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 16px;
+                color: #e0e0e0;
+            ">
+                <thead>
+                    <tr style="
+                        background-color: #161616;
+                        position: sticky;
+                        top: 0;
+                        z-index: 10;
+                        box-shadow: 0 1px 0 #1f1f1f;
+                    ">
+                        <th style="padding: 10px 8px; text-align: center; width: 22%;">Game #</th>
+                        <th style="padding: 10px 8px; text-align: left; width: 22%;">Date</th>
+                        <th style="padding: 10px 8px; text-align: left; width: 22%;">Solved</th>
+                        <th style="padding: 10px 8px; text-align: left; width: 24%;">Characters</th>
+                        <th style="padding: 10px 8px; text-align: left; width: 24%;">Lines</th>
+                        <th style="padding: 10px 8px; text-align: center; width: 20%;">Attempts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHTML}
+                </tbody>
+            </table>
+            </div>
+            <!-- Action Buttons -->
+                <div style="display: flex; gap: clamp(8px, 2vw, 12px); margin-top: auto;">
+                    <button id="pydle-share-btn" style="
+                        flex: 1;
+                        background-color: #1f2937;
+                        color: #ffffff;
+                        border: 1px solid #374151;
+                        padding: clamp(8px, 1.8vw, 12px) clamp(12px, 2vw, 16px);
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: clamp(12px, 2.5vw, 14px);
+                        cursor: pointer;
+                    ">Share</button>
+                    <button id="pydle-copy-btn" style="
+                        flex: 1;
+                        background-color: #1f2937;
+                        color: #ffffff;
+                        border: 1px solid #374151;
+                        padding: clamp(8px, 1.8vw, 12px) clamp(12px, 2vw, 16px);
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: clamp(12px, 2.5vw, 14px);
+                        cursor: pointer;
+                    ">Copy</button>
+        </div>`;
+
+        let shareText = "My Pydle Records\n\n"+subHeading+"\n\nhttps://pydle.net/"
+        const handleCopy = async () => {
+            try {
+                await navigator.clipboard.writeText(shareText);
+                overlay.remove();
+            } catch (err) {
+                console.error("Failed to copy: ", err);
+            }
+        };
+        document.getElementById('pydle-copy-btn').addEventListener('click', handleCopy);
+
+        // Share Handler
+        document.getElementById('pydle-share-btn').addEventListener('click', async () => {
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: "My Pydle Records",
+                        text: shareText
+                    });
+                } catch (err) {
+                    handleCopy();
+                }
+            } else {
+                handleCopy();
+            }
+        });
+    }
+
+    function showShareDialog(data) {
+        // Remove existing modal if already open
+        const existing = document.getElementById(DIALOG_BOX_ID);
+        if (existing) existing.remove();
+
+        const output = data.output;
+        const game = data.game;
+        const attempts = data.attempts;
+        const characters = data.characters;
+        const gridCols = output[0] ? output[0].length : 5;
+
+        // 1. Convert output matrix into HTML elements for visual preview
+        const gridHtml = output.flatMap(row =>
+            row.map(cell => {
+                const color = cell[1] || 'black';
+                const cssColor = colorCssMap[color] || '#333333';
+                return `<div style="
+                    aspect-ratio: 1;
+                    width: 100%;
+                    max-width: 32px;
+                    background: ${cssColor};
+                    border-radius: 6px;
+                "></div>`;
+            })
+        ).join('');
+
+        // 2. Convert output matrix into Emoji string (t)
+        const t = output.map(row => {
+            return row.map(cell => {
+                const color = cell[1];
+                return colorEmojiMap[color] || '⬛';
+            }).join('');
+        }).join('\n');
+
+        addDialogBox();
+
+        let heading = `You completed the Pydle!`
+        let subHeading = `Pydle #${game}`
+
+        let dailogInnerHtml = `
+         <!-- Responsive CSS Grid Output -->
                 <div style="
                     display: grid;
                     grid-template-columns: repeat(${gridCols}, minmax(0, 32px));
@@ -224,8 +436,8 @@
                 </div>
 
                 <!-- Stats Text -->
-                <div style="font-size: clamp(12px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: 6px;">Attempts: ${attempts}</div>
-                <div style="font-size: clamp(12px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: clamp(16px, 3vw, 24px);">Characters: ${characters}/250</div>
+                <div style="font-size: clamp(18px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: 6px;">Attempts: ${attempts}</div>
+                <div style="font-size: clamp(18px, 2.5vw, 14px); color: #e5e7eb; margin-bottom: clamp(16px, 3vw, 24px);">Characters: ${characters}/250</div>
 
                 <!-- Action Buttons -->
                 <div style="display: flex; gap: clamp(8px, 2vw, 12px); margin-top: auto;">
@@ -251,30 +463,25 @@
                         font-size: clamp(12px, 2.5vw, 14px);
                         cursor: pointer;
                     ">Copy</button>
-                </div>
-            </div>
-        `;
+                </div>`;
 
-        document.body.appendChild(overlay);
+        document.getElementById(DIALOG_BOX_HEADER_ID).textContent = heading;
+        document.getElementById(DIALOG_BOX_SUB_HEADER_ID).textContent = subHeading;
+        document.getElementById(DIALOG_BOX_BODY_ID).innerHTML = dailogInnerHtml;
 
-        // Event Listeners
-        document.getElementById('pydle-close-btn').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) overlay.remove();
-        });
-
+        let shareText = `Pydle #${game}\n${t}\nAttempts: ${attempts}\nCharacters: ${characters}/250\n`;
         // Copy Handler
         const handleCopy = async () => {
             try {
-                shareText+="https://pydle.net/";
+                shareText += "https://pydle.net/";
                 await navigator.clipboard.writeText(shareText);
                 overlay.remove();
             } catch (err) {
                 console.error("Failed to copy: ", err);
             }
         };
-
         document.getElementById('pydle-copy-btn').addEventListener('click', handleCopy);
+
         // Share Handler
         document.getElementById('pydle-share-btn').addEventListener('click', async () => {
             if (navigator.share) {
@@ -305,32 +512,6 @@
             return parseInt(content);
         }
         return 0;
-    }
-
-    function getCurrentPuzzleLocalStorageData() {
-        let key = ""
-        try {
-            let puzzleId = getPuzzleId();
-            let targetDate = new Date();
-            if (FIRST_TIME || puzzleId < 1) {
-                FIRST_TIME = false;
-            } else {
-                targetDate = new Date(BASE_DATE);
-                targetDate.setDate(targetDate.getDate() + puzzleId - 1)
-            }
-            const year = targetDate.getFullYear();
-            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-            const day = String(targetDate.getDate()).padStart(2, '0');
-            key = `pydle:guesses-1:${year}-${month}-${day}`;
-            let storedData = localStorage.getItem(key);
-            if (!storedData) {
-                storedData = "{}"
-            }
-            return JSON.parse(storedData);
-        } catch (error) {
-            console.error('Error parsing localStorage key:', key, error);
-        }
-        return JSON.parse("{}");
     }
 
     function calculateCharCount() {
@@ -373,16 +554,16 @@
         }
     }
 
-    function handleShareButton(){
+    function handleShareButton() {
         const puzzleData = getCurrentPuzzleLocalStorageData();
         let isSolved = puzzleData.solved;
         let isSuccess = puzzleData.success;
 
         let shareBtn = document.getElementById(SHARE_STATS_BTN_ID);
-        if (isSuccess && isSolved){
+        if (isSuccess && isSolved) {
             shareBtn.style.display = '';
         }
-        else{
+        else {
             shareBtn.style.display = 'none';
         }
 
@@ -547,6 +728,32 @@
         appendButton(SHARE_STATS_BTN_ID, `Share`);
     }
 
+    function createRecordsButton() {
+        const container = document.querySelector('.fixed.top-3.z-10');
+        if (document.getElementById(RECORDS_BTN_ID)) return;
+
+        const templateBtn = container.lastElementChild;
+        if (!templateBtn) return;
+
+        const newBtn = templateBtn.cloneNode(true);
+        newBtn.id = RECORDS_BTN_ID;
+        newBtn.style.left = '73%';
+        newBtn.style.position = 'fixed';
+
+        const svgElement = newBtn.querySelector('svg');
+        if (svgElement) {
+            const path = svgElement.querySelector('path');
+            if (path) {
+                path.setAttribute('d', 'M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94A5.01 5.01 0 0 0 11 15.9V18H8v2h8v-2h-3v-2.1a5.01 5.01 0 0 0 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z');
+            }
+        }
+
+        container.appendChild(newBtn);
+
+        newBtn.addEventListener('click', recordsDialogBox);
+
+    }
+
     function initUI() {
         const container = document.querySelector('.flex.gap-4');
         if (!container) return false;
@@ -557,10 +764,10 @@
         createStatsButtons(container);
         setupAriaSelectedObserver(firstChild);
         setupPuzzleChangeObserver();
+        createRecordsButton();
 
         return true;
     }
-
     // Attach UI listener on DOM loading
     window.addEventListener('DOMContentLoaded', function () {
         if (!initUI()) {

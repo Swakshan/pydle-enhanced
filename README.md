@@ -62,8 +62,8 @@ Contributions, issues, and feature requests are welcome! Feel free to check out 
 
 ---
 
-## 🤵Visitor count
-<img src="https://count.getloli.com/@%7B-Swakshan-pydle-enhanced%7D?theme=3d-num&padding=8&offset=-5&align=center&scale=1&pixelated=0&darkmode=auto" />
+<!-- ## 🤵Visitor count
+<img src="https://count.getloli.com/@%7B-Swakshan-pydle-enhanced%7D?theme=3d-num&padding=8&offset=-5&align=center&scale=1&pixelated=0&darkmode=auto" /> -->
 
 ---
 
